@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from 'dotenv';
 import { agent } from '@/lib/agent';
 import { HumanMessage } from '@langchain/core/messages';
-import { summariseTool, searchTool } from '@/lib/tools/search';
+import { summariseTool, searchTool, defineTool } from '@/lib/tools/search';
 
 config();
 
@@ -21,17 +21,20 @@ export async function POST(req: Request) {
         const { task, thread_id } = parsed;
 
         console.log("Received task:", task)
-
-        const searchResult = await searchTool.func({ query: task });
-
-        console.log("Search Tool Result:", searchResult);
-
+            
         const response = await agent.invoke({
             messages: [new HumanMessage(task)]
-        }, thread_id ? { configurable: { thread_id }} : undefined )
+        }, {
+            recursionLimit: 50,
+            ...(thread_id ? { configurable: { thread_id }} : {})
+        })
+
+        const lastMessageWithContent = response.messages
+            .reverse()
+            .find((msg: any) => msg.content && typeof msg.content === 'string');
 
         return Response.json({
-             result: searchResult || response.structuredResponse?.Root?.content || "No content available"
+             result: lastMessageWithContent?.content || "No content available"
         })
     } catch (error) {
         console.error(error)
